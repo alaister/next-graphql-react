@@ -112,26 +112,34 @@ export const withGraphQLApp = App =>
      * @returns {object} Props.
      * @ignore
      */
-    static getInitialProps = context =>
-      new Promise(resolve => {
+    static getInitialProps = context => {
+      let graphql = new GraphQL()
+      let graphqlLinkHeader
+
+      if (!process.browser) {
+        graphqlLinkHeader = new LinkHeader()
+
+        graphql.on('cache', ({ response }) => {
+          // The response may be undefined if there were fetch errors.
+          if (response) {
+            const linkHeader = response.headers.get('Link')
+            if (linkHeader) graphqlLinkHeader.parse(linkHeader)
+          }
+        })
+      }
+
+      // Sets the graphql instance on the ctx object for access from pages
+      // getInitialProps
+      context.ctx.graphql = graphql
+
+      return new Promise(resolve => {
         Promise.resolve(
           App.getInitialProps ? App.getInitialProps(context) : {}
         ).then(props => {
           // Next.js webpack config uses process.browser to eliminate code from
           // the relevant server/browser bundle.
-          if (process.browser) resolve(props)
-          else {
-            const graphql = new GraphQL()
-            const graphqlLinkHeader = new LinkHeader()
-
-            graphql.on('cache', ({ response }) => {
-              // The response may be undefined if there were fetch errors.
-              if (response) {
-                const linkHeader = response.headers.get('Link')
-                if (linkHeader) graphqlLinkHeader.parse(linkHeader)
-              }
-            })
-
+          if (process.browser) return resolve(props)
+          else
             ssr(graphql, <context.AppTree {...props} graphql={graphql} />)
               .catch(console.error)
               .then(() => {
@@ -163,9 +171,9 @@ export const withGraphQLApp = App =>
                 props.graphqlCache = graphql.cache
                 resolve(props)
               })
-          }
         })
       })
+    }
 
     /**
      * The `GraphQL` instance.
